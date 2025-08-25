@@ -35,6 +35,8 @@ services:
     container_name: dremio
     networks:
       lakehouse-net:
+    environment:
+      - DREMIO_JAVA_SERVER_EXTRA_OPTS=-Dpaths.dist=file:///opt/dremio/data/dist
     ports:
       - 9047:9047
       - 31010:31010
@@ -58,6 +60,11 @@ services:
       - AWS_SECRET_ACCESS_KEY=password
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_REGION=us-east-1
+      - CATALOG_URI=http://nessie:19120/api/v1
+      - STORAGE_URI=http://minio:9000
+      - JDBC_URL=jdbc:postgresql://postgres:5435/mydb
+      - JUPYTER_TOKEN=easy
+      - JUPYTER_PASSWORD=your_strong_password_here
     volumes:
       - spark-notebooks:/app
 
