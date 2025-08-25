@@ -1,0 +1,100 @@
+version: "3"
+
+services:
+  # Nessie Catalog Server Using In-Memory Store
+  nessie:
+    image: projectnessie/nessie:latest
+    container_name: nessie
+    networks:
+      lakehouse-net:
+    ports:
+      - 19120:19120
+    volumes:
+      - nessie-data:/var/lib/nessie/data
+
+  # Minio Storage Server (Object Store for Iceberg Tables)
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      - MINIO_ROOT_USER=admin
+      - MINIO_ROOT_PASSWORD=password
+      - MINIO_REGION=us-east-1
+    networks:
+      lakehouse-net:
+    ports:
+      - 9001:9001
+      - 9000:9000
+    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio-data:/data
+
+  # Dremio (Lakehouse Query Engine)
+  dremio:
+    image: dremio/dremio-oss:latest
+    container_name: dremio
+    networks:
+      lakehouse-net:
+    ports:
+      - 9047:9047
+      - 31010:31010
+      - 32010:32010
+    volumes:
+      - dremio-data:/opt/dremio/data
+
+  # Spark (Data Processing & Ingestion)
+  spark:
+    image: alexmerced/spark35nb:latest
+    container_name: spark
+    platform: linux/amd64
+    networks:
+      lakehouse-net:
+    ports:
+      - 8080:8080  # Master Web UI
+      - 7077:7077  # Master Port
+      - 8888:8888  # Jupyter Notebook
+    environment:
+      - AWS_ACCESS_KEY_ID=admin
+      - AWS_SECRET_ACCESS_KEY=password
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_REGION=us-east-1
+    volumes:
+      - spark-notebooks:/app
+
+  # Postgres (Simulating an OLTP Database)
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+    networks:
+      lakehouse-net:
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  # Apache Superset (BI & Dashboards)
+  superset:
+    image: alexmerced/dremio-superset
+    container_name: superset
+    platform: linux/amd64
+    networks:
+      lakehouse-net:
+    ports:
+      - 8088:8088
+    volumes:
+      - superset-data:/app/superset_home
+
+networks:
+  lakehouse-net:
+
+volumes:
+  nessie-data:
+  minio-data:
+  dremio-data:
+  spark-notebooks:
+  postgres-data:
+  superset-data:
