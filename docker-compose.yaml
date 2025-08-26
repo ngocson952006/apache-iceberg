@@ -94,6 +94,14 @@ services:
     privileged: true
     container_name: superset
     platform: linux/amd64
+    environment:
+      - WTF_CSRF_ENABLED=False
+      - WTF_CSRF_CHECK_DEFAULT=False
+      - CSRF_ENABLED=False
+      - TALISMAN_ENABLED=False
+      - SESSION_COOKIE_SECURE=False
+      - SESSION_COOKIE_SAMESITE="None"
+      - SESSION_COOKIE_HTTPONLY=True
     networks:
       lakehouse-net:
     ports:
