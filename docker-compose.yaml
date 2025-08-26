@@ -4,6 +4,7 @@ services:
   # Nessie Catalog Server Using In-Memory Store
   nessie:
     image: projectnessie/nessie:latest
+    privileged: true
     container_name: nessie
     networks:
       lakehouse-net:
@@ -15,6 +16,7 @@ services:
   # Minio Storage Server (Object Store for Iceberg Tables)
   minio:
     image: minio/minio:latest
+    privileged: true
     container_name: minio
     environment:
       - MINIO_ROOT_USER=admin
@@ -32,6 +34,7 @@ services:
   # Dremio (Lakehouse Query Engine)
   dremio:
     image: dremio/dremio-oss:latest
+    privileged: true
     container_name: dremio
     networks:
       lakehouse-net:
@@ -47,6 +50,7 @@ services:
   # Spark (Data Processing & Ingestion)
   spark:
     image: alexmerced/spark35nb:latest
+    privileged: true
     container_name: spark
     platform: linux/amd64
     networks:
@@ -71,6 +75,7 @@ services:
   # Postgres (Simulating an OLTP Database)
   postgres:
     image: postgres:latest
+    privileged: true
     container_name: postgres
     environment:
       POSTGRES_DB: mydb
@@ -86,6 +91,7 @@ services:
   # Apache Superset (BI & Dashboards)
   superset:
     image: alexmerced/dremio-superset
+    privileged: true
     container_name: superset
     platform: linux/amd64
     networks:
