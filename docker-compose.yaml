@@ -65,12 +65,17 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_REGION=us-east-1
       - CATALOG_URI=http://nessie:19120/api/v1
-      - STORAGE_URI=http://minio:9000
-      - JDBC_URL=jdbc:postgresql://postgres:5435/mydb
+      - STORAGE_URI=http://172.19.0.6:9000
+      - JDBC_URL=jdbc:postgresql://postgres:5432/mydb
       - JUPYTER_TOKEN=easy
       - JUPYTER_PASSWORD=your_strong_password_here
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=4321
+      - CHOWN_HOME=yes
+      - CHOWN_HOME_OPTS=-R
     volumes:
       - spark-notebooks:/app
+      - ./notebooks:/home/justdataplease
 
   # Postgres (Simulating an OLTP Database)
   postgres:
