@@ -4,6 +4,7 @@ services:
   # Nessie Catalog Server Using In-Memory Store
   nessie:
     image: projectnessie/nessie:latest
+    privileged: true
     container_name: nessie
     networks:
       lakehouse-net:
@@ -15,6 +16,7 @@ services:
   # Minio Storage Server (Object Store for Iceberg Tables)
   minio:
     image: minio/minio:latest
+    privileged: true
     container_name: minio
     environment:
       - MINIO_ROOT_USER=admin
@@ -32,6 +34,7 @@ services:
   # Dremio (Lakehouse Query Engine)
   dremio:
     image: dremio/dremio-oss:latest
+    privileged: true
     container_name: dremio
     networks:
       lakehouse-net:
@@ -47,6 +50,7 @@ services:
   # Spark (Data Processing & Ingestion)
   spark:
     image: alexmerced/spark35nb:latest
+    privileged: true
     container_name: spark
     platform: linux/amd64
     networks:
@@ -61,16 +65,22 @@ services:
       - AWS_DEFAULT_REGION=us-east-1
       - AWS_REGION=us-east-1
       - CATALOG_URI=http://nessie:19120/api/v1
-      - STORAGE_URI=http://minio:9000
-      - JDBC_URL=jdbc:postgresql://postgres:5435/mydb
+      - STORAGE_URI=http://172.19.0.6:9000
+      - JDBC_URL=jdbc:postgresql://postgres:5432/mydb
       - JUPYTER_TOKEN=easy
       - JUPYTER_PASSWORD=your_strong_password_here
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=4321
+      - CHOWN_HOME=yes
+      - CHOWN_HOME_OPTS=-R
     volumes:
       - spark-notebooks:/app
+      - ./notebooks:/home/justdataplease
 
   # Postgres (Simulating an OLTP Database)
   postgres:
     image: postgres:latest
+    privileged: true
     container_name: postgres
     environment:
       POSTGRES_DB: mydb
@@ -86,18 +96,29 @@ services:
   # Apache Superset (BI & Dashboards)
   superset:
     image: alexmerced/dremio-superset
+    privileged: true
     container_name: superset
     platform: linux/amd64
+    environment:
+      - WTF_CSRF_ENABLED=False
+      - WTF_CSRF_CHECK_DEFAULT=False
+      - CSRF_ENABLED=False
+      - TALISMAN_ENABLED=False
+      - SESSION_COOKIE_SECURE=False
+      - SESSION_COOKIE_SAMESITE="None"
+      - SESSION_COOKIE_HTTPONLY=True
     networks:
       lakehouse-net:
     ports:
       - 8088:8088
     volumes:
       - superset-data:/app/superset_home
+
   # Airflow Postgres (metadata database for Airflow)
   airflow-db:
     image: postgres:15
     container_name: airflow-db
+    privileged: true
     environment:
       - POSTGRES_USER=airflow
       - POSTGRES_PASSWORD=airflow
@@ -112,13 +133,27 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis for Airflow rate limit storage (and reusable for other components)
+  redis:
+    image: redis:7-alpine
+    privileged: true
+    container_name: airflow-redis
+    networks:
+      lakehouse-net:
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
   # One-time initializer to set up the Airflow DB and admin user
   airflow-init:
     image: apache/airflow:2.9.3
+    privileged: true
     container_name: airflow-init
     depends_on:
       airflow-db:
         condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       lakehouse-net:
     environment:
@@ -126,6 +161,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       - AIRFLOW__CORE__FERNET_KEY=9dZb0nHfWc9D4e2lPpYkY2JmQ1s6g8h3w5x7z9aBcDe=
       - AIRFLOW__CORE__LOAD_EXAMPLES=True
+      - AIRFLOW__WEBSERVER__RATE_LIMIT_STORAGE_URI=redis://redis:6379/0
     volumes:
       - airflow-dags:/opt/airflow/dags
       - airflow-logs:/opt/airflow/logs
@@ -146,18 +182,22 @@ services:
   # Airflow Webserver
   airflow-webserver:
     image: apache/airflow:2.9.3
+    privileged: true
     container_name: airflow-webserver
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     networks:
       lakehouse-net:
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       - AIRFLOW__CORE__FERNET_KEY=9dZb0nHfWc9D4e2lPpYkY2JmQ1s6g8h3w5x7z9aBcDe=
+      - AIRFLOW__WEBSERVER__RATE_LIMIT_STORAGE_URI=redis://redis:6379/0
     ports:
-      - "8081:8080"  # Airflow Web UI (avoid conflict with Spark 8080)
+      - "8081:8080"  # Airflow Web UI
     volumes:
       - airflow-dags:/opt/airflow/dags
       - airflow-logs:/opt/airflow/logs
@@ -167,22 +207,25 @@ services:
   # Airflow Scheduler
   airflow-scheduler:
     image: apache/airflow:2.9.3
+    privileged: true
     container_name: airflow-scheduler
     depends_on:
       airflow-init:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     networks:
       lakehouse-net:
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
       - AIRFLOW__CORE__FERNET_KEY=9dZb0nHfWc9D4e2lPpYkY2JmQ1s6g8h3w5x7z9aBcDe=
+      - AIRFLOW__WEBSERVER__RATE_LIMIT_STORAGE_URI=redis://redis:6379/0
     volumes:
       - airflow-dags:/opt/airflow/dags
       - airflow-logs:/opt/airflow/logs
       - airflow-plugins:/opt/airflow/plugins
     command: scheduler
-
 
 networks:
   lakehouse-net:
@@ -198,4 +241,3 @@ volumes:
   airflow-logs:
   airflow-plugins:
   airflow-postgres-data:
-
