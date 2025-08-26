@@ -94,6 +94,95 @@ services:
       - 8088:8088
     volumes:
       - superset-data:/app/superset_home
+  # Airflow Postgres (metadata database for Airflow)
+  airflow-db:
+    image: postgres:15
+    container_name: airflow-db
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    networks:
+      lakehouse-net:
+    volumes:
+      - airflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-time initializer to set up the Airflow DB and admin user
+  airflow-init:
+    image: apache/airflow:2.9.3
+    container_name: airflow-init
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    networks:
+      lakehouse-net:
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=9dZb0nHfWc9D4e2lPpYkY2JmQ1s6g8h3w5x7z9aBcDe=
+      - AIRFLOW__CORE__LOAD_EXAMPLES=True
+    volumes:
+      - airflow-dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+      - airflow-plugins:/opt/airflow/plugins
+    entrypoint: /bin/bash
+    command: -c "
+      airflow db migrate &&
+      airflow users create \
+        --role Admin \
+        --username admin \
+        --password admin \
+        --firstname Air \
+        --lastname Flow \
+        --email admin@example.com
+      "
+    restart: "no"
+
+  # Airflow Webserver
+  airflow-webserver:
+    image: apache/airflow:2.9.3
+    container_name: airflow-webserver
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      lakehouse-net:
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=9dZb0nHfWc9D4e2lPpYkY2JmQ1s6g8h3w5x7z9aBcDe=
+    ports:
+      - "8081:8080"  # Airflow Web UI (avoid conflict with Spark 8080)
+    volumes:
+      - airflow-dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+      - airflow-plugins:/opt/airflow/plugins
+    command: webserver
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    image: apache/airflow:2.9.3
+    container_name: airflow-scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      lakehouse-net:
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=9dZb0nHfWc9D4e2lPpYkY2JmQ1s6g8h3w5x7z9aBcDe=
+    volumes:
+      - airflow-dags:/opt/airflow/dags
+      - airflow-logs:/opt/airflow/logs
+      - airflow-plugins:/opt/airflow/plugins
+    command: scheduler
+
 
 networks:
   lakehouse-net:
@@ -105,3 +194,8 @@ volumes:
   spark-notebooks:
   postgres-data:
   superset-data:
+  airflow-dags:
+  airflow-logs:
+  airflow-plugins:
+  airflow-postgres-data:
+
