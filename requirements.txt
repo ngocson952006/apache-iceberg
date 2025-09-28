@@ -1,3 +1,4 @@
 pyspark==3.5.0
 pandas==2.2.3
 s3fs
+recordlinkage
